@@ -27,6 +27,7 @@ async function run() {
   try {
     await client.connect();
     const gadgetCollection = client.db("gadget").collection("users");
+    const orderCollection = client.db("gadget").collection("orders");
 
     // jwt token:
     app.post("/login", (req, res) => {
@@ -38,8 +39,44 @@ async function run() {
     app.post("/uploadPd", async (req, res) => {
       const body = req.body;
       console.log(body);
-      const result = await gadgetCollection.insertOne(body);
+
+      const tokenInfo = req.headers.authorization;
+      // console.log(tokenInfo);
+
+      const [email, accessToken] = tokenInfo.split(" ");
+      const decoded = verifyToken(accessToken);
+      console.log(decoded);
+
+      if (email === decoded?.email) {
+        const result = await gadgetCollection.insertOne(body);
+        res.send(result);
+      } else {
+        res.send({ success: "unAuthorized Access" });
+      }
+    });
+
+    app.get("/products", async (req, res) => {
+      const products = await gadgetCollection.find({}).toArray();
+      res.send(products);
+    });
+
+    app.post("/orders", async (req, res) => {
+      const order = req.body;
+      const result = await orderCollection.insertOne(order);
       res.send(result);
+    });
+
+    app.get("/showOrder", async (req, res) => {
+      const tokenInfo = req.headers.authorization;
+      const [email, accessToken] = tokenInfo.split(" ");
+      const decoded = verifyToken(accessToken);
+
+      if (email === decoded.email) {
+        const products = await orderCollection.find({ email }).toArray();
+        res.send(products);
+      } else {
+        res.send({ success: "Unauthorized Access" });
+      }
     });
   } finally {
   }
@@ -53,3 +90,18 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`Server running the port ${port}`);
 });
+
+// verify jwt token:
+function verifyToken(token) {
+  let email;
+  jwt.verify(token, process.env.JWT_ACCESS_TOKEN, function (err, decoded) {
+    if (err) {
+      email = "Invalid Email";
+    }
+    if (decoded) {
+      email = decoded;
+      console.log(decoded);
+    }
+  });
+  return email;
+}
